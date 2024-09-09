@@ -1,7 +1,7 @@
 # personagem.py
 import pygame
 import math
-from constantes import BLACK, RED,BLUE, TipoObstaculo
+from constantes import BLACK, RED, BLUE, VERDE, TipoObstaculo
 from tiro import Tiro
 import random
 
@@ -9,7 +9,7 @@ class Personagem:
     def __init__(self, pos, arena, radius=20, speed=5, vidas=5):
         self.pos = pos
         self.radius = radius
-        self.angle = 0
+        self.angle = 0 # orientação do personagem
         self.speed = speed
         self.correndo = False
         self.lento = False
@@ -26,8 +26,45 @@ class Personagem:
         self.cone_maximo = 45   # Ângulo máximo do cone quando o personagem está correndo
         self.tmo_brl_min = 2
         self.tmo_brl_piqueno = 3
-        self.tmo_brl_medio = 4
-        self.tmo_brl_grande = 6
+        self.tmo_brl_medio = 6
+        self.tmo_brl_grande = 12
+        self.direcoes_visao = self.calcular_direcoes_visao()
+        self.direcoes_som = self.calcular_direcoes_som()
+        self.alcance_visao = 100  # Alcance máximo dos feixes de visão
+        self.alcance_som = 150  # Alcance máximo dos feixes de som
+
+    def atualizar_angulo(self):
+        self.direcoes_visao = self.calcular_direcoes_visao()  # Recalcular direções após mudança de ângulo
+
+    def calcular_direcoes_visao(self):
+        direcoes = []
+        num_feixes = 8
+        angulo_cone = 75
+        angulo_cone_radianos = math.radians(angulo_cone)
+        angulo_central = math.radians(self.angle)  # Convertendo o ângulo de orientação para radianos
+        angulo_inicial = angulo_central - angulo_cone_radianos / 2
+        passo_radianos = angulo_cone_radianos / (num_feixes - 1)
+
+        for i in range(num_feixes):
+            angulo = angulo_inicial + i * passo_radianos
+            direcao = (math.cos(angulo), math.sin(angulo))
+            direcoes.append(direcao)
+            print(f'Direção {i+1}: ângulo = {math.degrees(angulo)}°, direção = {direcao}')
+        
+        return direcoes
+
+    def calcular_direcoes_som(self):
+        direcoes = []
+        num_feixes = 8
+        passo = 2 * math.pi / num_feixes
+
+        for i in range(num_feixes):
+            angulo = i * passo
+            direcao = (math.cos(angulo), math.sin(angulo))
+            direcoes.append(direcao)
+        
+        return direcoes
+    
     def perder_vida(self):
         """Reduz a vida do personagem em 1."""
         self.vida_atual -= 1
@@ -95,7 +132,7 @@ class Personagem:
 
     def desenhar(self, surface):
         """Desenha o personagem e o círculo de barulho no surface."""
-        pygame.draw.circle(surface, RED, self.pos, self.radius)
+        pygame.draw.circle(surface, VERDE, self.pos, self.radius)
         direction = (math.cos(math.radians(self.angle)), math.sin(math.radians(self.angle)))
         line_end = (self.pos[0] + direction[0] * self.radius, self.pos[1] + direction[1] * self.radius)
         pygame.draw.line(surface, BLACK, self.pos, line_end, 2)
@@ -114,6 +151,15 @@ class Personagem:
         for tiro in self.tiros:
             tiro.desenhar(surface)
 
+        # Desenha os feixes de visão
+        for direcao in self.direcoes_visao:
+            linha_fim = (self.pos[0] + direcao[0] * self.alcance_visao, self.pos[1] + direcao[1] * self.alcance_visao)
+            pygame.draw.line(surface, RED, self.pos, linha_fim, 2)
+        
+        # Desenha os feixes de som
+        # for direcao in self.direcoes_som:
+        #     pygame.draw.line(surface, (0, 255, 0), self.pos, (self.pos[0] + direcao[0] * self.radius, self.pos[1] + direcao[1] * self.radius), 2)
+      
     def _determinar_velocidade(self):
             if self.correndo and self.lento:
                 return self.speed
@@ -199,10 +245,12 @@ class Personagem:
     def rotacionar_esquerda(self):
         """Rotaciona o personagem para a esquerda."""
         self.angle += 5
+        self.atualizar_angulo()
 
     def rotacionar_direita(self):
         """Rotaciona o personagem para a direita."""
         self.angle -= 5
+        self.atualizar_angulo()
 
     def atirar(self):
         """Lança um tiro se o personagem estiver se movendo na velocidade padrão ou menor."""
@@ -214,3 +262,52 @@ class Personagem:
             novo_tiro = Tiro(self.pos, direcao_aleatoria)
             self.tiros.append(novo_tiro)
             self.tempo_ultimo_tiro = tempo_atual  # Atualiza o tempo do último tiro
+
+    def detectar_obstaculos(self, obstaculos):
+        distancias = []
+        for direcao in self.direcoes_visao:
+            for obstaculo in obstaculos:
+                # Cálculo da distância e verificação de interseção com o obstáculo
+                distancia = self.calcular_distancia_obstaculo(direcao, obstaculo)
+                if distancia < self.raio_visao:
+                    distancias.append((obstaculo, distancia))
+        return distancias
+
+    def _distancia_entre_pontos(self, ponto1, ponto2):
+        return math.sqrt((ponto2[0] - ponto1[0])**2 + (ponto2[1] - ponto1[1])**2)
+   
+    def calcular_distancia_obstaculo(self, direcao, obstaculo):
+        """Calcula a distância entre o personagem e um obstáculo na direção especificada e retorna os pontos da linha de verificação."""
+        # Exemplo simples: calcula o ponto de interseção entre o personagem e o obstáculo
+        # Substitua o seguinte código com o cálculo real
+        start_point = self.pos
+        end_point = (self.pos[0] + direcao[0] * 1000, self.pos[1] + direcao[1] * 1000)  # Extende a linha para o infinito
+
+        # Aqui você deve adicionar a lógica para calcular a interseção real com o obstáculo
+        # Neste exemplo, vamos apenas retornar os pontos de início e fim e uma distância fictícia
+        distancia = math.hypot(end_point[0] - start_point[0], end_point[1] - start_point[1])
+        
+        return distancia, start_point, end_point
+
+    def detectar_som(self, inimigos):
+        distancias = []
+        for direcao in self.direcoes_som:
+            for inimigo in inimigos:
+                # Cálculo da distância e verificação de presença do inimigo
+                distancia = self.calcular_distancia_som(direcao, inimigo)
+                if distancia < self.raio_som:
+                    distancias.append((inimigo, distancia))
+        return distancias
+
+    def calcular_distancia_som(self, direcao, inimigo):
+        """Calcula a distância entre o personagem e um inimigo na direção especificada e retorna os pontos da linha de verificação."""
+        # Exemplo simples: calcula o ponto de interseção entre o personagem e o inimigo
+        # Substitua o seguinte código com o cálculo real
+        start_point = self.pos
+        end_point = (self.pos[0] + direcao[0] * 1000, self.pos[1] + direcao[1] * 1000)  # Extende a linha para o infinito
+
+        # Aqui você deve adicionar a lógica para calcular a interseção real com o inimigo
+        # Neste exemplo, vamos apenas retornar os pontos de início e fim e uma distância fictícia
+        distancia = math.hypot(end_point[0] - start_point[0], end_point[1] - start_point[1])
+        
+        return distancia, start_point, end_point

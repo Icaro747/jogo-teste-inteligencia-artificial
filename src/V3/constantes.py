@@ -11,6 +11,7 @@ BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 BLUE =  (0, 0, 255, 50)
 CINZA = (100, 100, 100)
+VERDE = (17, 119, 45)
 
 # Enumerador para tipos de obstáculos
 class TipoObstaculo(Enum):
