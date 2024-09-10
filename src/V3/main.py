@@ -16,12 +16,16 @@ def main():
     personagem1 = Personagem([arena.largura // 2, 30], arena, 20, 3)
     personagem2  = Personagem([arena.largura // 2, arena.altura - 30], arena, 20, 3)
 
+    # Adicionando personagens à arena
+    arena.adicionar_personagem(personagem1)
+    arena.adicionar_personagem(personagem2)
+
     # Adicionando obstáculos à arena
     arena.adicionar_obstaculo(Obstaculo([arena.largura // 2 - 150, arena.altura // 2 - 37.5], 300, 75, Con.BLACK, Con.TipoObstaculo.INTRANSPONIVEL))
-    arena.adicionar_obstaculo(Obstaculo([arena.largura - 150, arena.altura // 5], 150, 70, Con.CINZA, Con.TipoObstaculo.TRANSPONIVEL))
-    arena.adicionar_obstaculo(Obstaculo([0, arena.altura // 5], 150, 70, Con.CINZA, Con.TipoObstaculo.TRANSPONIVEL))
-    arena.adicionar_obstaculo(Obstaculo([arena.largura - 150, arena.altura // 2 + arena.altura // 5], 150, 70, Con.CINZA, Con.TipoObstaculo.TRANSPONIVEL))
-    arena.adicionar_obstaculo(Obstaculo([0, arena.altura // 2 + arena.altura // 5], 150, 70, Con.CINZA, Con.TipoObstaculo.TRANSPONIVEL))
+    arena.adicionar_obstaculo(Obstaculo([arena.largura - 150, arena.altura // 5], 150, 70, Con.CINZA, Con.TipoObstaculo.INTRANSPONIVEL))
+    arena.adicionar_obstaculo(Obstaculo([0, arena.altura // 5], 150, 70, Con.CINZA, Con.TipoObstaculo.INTRANSPONIVEL))
+    arena.adicionar_obstaculo(Obstaculo([arena.largura - 150, arena.altura // 2 + arena.altura // 5], 150, 70, Con.CINZA, Con.TipoObstaculo.INTRANSPONIVEL))
+    arena.adicionar_obstaculo(Obstaculo([0, arena.altura // 2 + arena.altura // 5], 150, 70, Con.CINZA, Con.TipoObstaculo.INTRANSPONIVEL))
 
     # No loop principal
     running = True

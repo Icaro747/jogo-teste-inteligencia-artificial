@@ -1,18 +1,18 @@
 # personagem.py
 import pygame
 import math
-from constantes import BLACK, RED, BLUE, VERDE, TipoObstaculo
+from constantes import BLACK, RED, BLUE, VERDE, ROXO, TipoObstaculo
 from tiro import Tiro
 import random
 
 class Personagem:
     def __init__(self, pos, arena, radius=20, speed=5, vidas=5):
-        self.pos = pos
+        self.pos = pos # posição do personagem
         self.radius = radius
         self.angle = 0 # orientação do personagem
-        self.speed = speed
-        self.correndo = False
-        self.lento = False
+        self.speed = speed # velocidade do personagem
+        self.correndo = False # se está correndo
+        self.lento = False # você está andando devagar
         self.arena = arena
         self.movendo = False  # Novo atributo para verificar se o personagem está se movendo
         self.tiros = []  # Lista para armazenar os tiros
@@ -28,31 +28,246 @@ class Personagem:
         self.tmo_brl_piqueno = 3
         self.tmo_brl_medio = 6
         self.tmo_brl_grande = 12
-        self.direcoes_visao = self.calcular_direcoes_visao()
-        self.direcoes_som = self.calcular_direcoes_som()
+        # self.direcoes_visao = self.calcular_direcoes_visao()
+        # self.direcoes_som = self.calcular_direcoes_som()
         self.alcance_visao = 100  # Alcance máximo dos feixes de visão
         self.alcance_som = 150  # Alcance máximo dos feixes de som
+        self.distancia_maxima_visao = 200
+        self.colisoes = [{'ponto_colisao': None, 'distancia': float('inf')} for _ in range(8)] # valores de visão e da distância de outros objetos
+        self.colisoes_som = [{'ponto_colisao': None, 'distancia': float('inf')} for _ in range(12)] # valores de som e da distância de outros personagens
 
-    def atualizar_angulo(self):
-        self.direcoes_visao = self.calcular_direcoes_visao()  # Recalcular direções após mudança de ângulo
+    def desenhar_laser_360(self, surface):
+        """Desenha 12 lasers em um formato de cone a partir do personagem e verifica colisão com obstáculos."""
+        num_lasers = 12
+        cone_angle = 360 # Ângulo total do cone (em graus)
+        half_cone_angle = cone_angle / 2
 
-    def calcular_direcoes_visao(self):
-        direcoes = []
-        num_feixes = 8
-        angulo_cone = 75
-        angulo_cone_radianos = math.radians(angulo_cone)
-        angulo_central = math.radians(self.angle)  # Convertendo o ângulo de orientação para radianos
-        angulo_inicial = angulo_central - angulo_cone_radianos / 2
-        passo_radianos = angulo_cone_radianos / (num_feixes - 1)
+        # Desenha os lasers
+        for i in range(num_lasers):
+            # Calcula o ângulo do laser
+            angle_offset = half_cone_angle - (i * cone_angle / (num_lasers - 1))
+            laser_angle = self.angle + angle_offset
+            
+            # Calcula a posição final do laser
+            direction = (math.cos(math.radians(laser_angle)), math.sin(math.radians(laser_angle)))
+            end_pos = (self.pos[0] + direction[0] * self.distancia_maxima_visao, 
+                       self.pos[1] + direction[1] * self.distancia_maxima_visao)
+            
+            # Desenha o laser
+            pygame.draw.line(surface, ROXO, self.pos, end_pos, 2)
+            
+            # Verifica a colisão do laser com os obstáculos
+            ponto_colisao, distancia = self._verificar_colisao_laser_com_barulho(end_pos)
+            
+            if ponto_colisao:
+                # Adiciona a colisão à lista
+                self.colisoes_som[i] = {'ponto_colisao': ponto_colisao, 'distancia': distancia}
+                # Desenha um círculo vermelho no ponto de colisão
+                pygame.draw.circle(surface, ROXO, ponto_colisao, 5)
 
-        for i in range(num_feixes):
-            angulo = angulo_inicial + i * passo_radianos
-            direcao = (math.cos(angulo), math.sin(angulo))
-            direcoes.append(direcao)
-            print(f'Direção {i+1}: ângulo = {math.degrees(angulo)}°, direção = {direcao}')
+    def _verificar_colisao_laser_com_barulho(self, laser_end):
+        """Verifica a colisão do laser com os círculos de barulho dos outros personagens."""
+        ponto_colisao = None
+        menor_distancia = self.distancia_maxima_visao
+
+        # Verifica colisão com os círculos de barulho dos outros personagens
+        for personagem in self.arena.personagens:
+            if personagem == self:
+                continue
+            # Calcula o círculo de barulho do personagem
+            tamanho_barulho = personagem._atualizar_tamanho_barulho()
+            centro = personagem.pos
+            raio = tamanho_barulho
+            colisao, ponto_colisao_personagem, distancia_personagem = self._interseccao_laser_circulo(laser_end, centro, raio)
+            if colisao and distancia_personagem < menor_distancia:
+                menor_distancia = distancia_personagem
+                ponto_colisao = ponto_colisao_personagem
+
+        return ponto_colisao, menor_distancia
+    
+    def _interseccao_laser_circulo(self, laser_end, centro_circulo, raio_circulo):
+        """Verifica a colisão entre o laser e um círculo (representando o círculo de barulho)."""
+        # Calcula a interseção entre o laser e o círculo
+        x0, y0 = self.pos
+        x1, y1 = laser_end
+        cx, cy = centro_circulo
+        dx, dy = x1 - x0, y1 - y0
+        A = dx**2 + dy**2
+        B = 2 * (dx * (x0 - cx) + dy * (y0 - cy))
+        C = (x0 - cx)**2 + (y0 - cy)**2 - raio_circulo**2
+        discriminant = B**2 - 4 * A * C
+
+        if discriminant < 0:
+            return False, None, float('inf')  # Sem colisão
+
+        discriminant = math.sqrt(discriminant)
+        t1 = (-B - discriminant) / (2 * A)
+        t2 = (-B + discriminant) / (2 * A)
+
+        if t1 >= 0 and t1 <= 1:
+            x_colisao = x0 + t1 * dx
+            y_colisao = y0 + t1 * dy
+            distancia = math.hypot(x_colisao - x0, y_colisao - y0)
+            return True, (int(x_colisao), int(y_colisao)), distancia
+
+        if t2 >= 0 and t2 <= 1:
+            x_colisao = x0 + t2 * dx
+            y_colisao = y0 + t2 * dy
+            distancia = math.hypot(x_colisao - x0, y_colisao - y0)
+            return True, (int(x_colisao), int(y_colisao)), distancia
+
+        return False, None, float('inf')  # Sem colisão
+
+    def desenhar_laser(self, surface):
+        """Desenha 8 lasers em um formato de cone a partir do personagem e verifica colisão com obstáculos."""
+        num_lasers = 8
+        cone_angle = 30  # Ângulo total do cone (em graus)
+        half_cone_angle = cone_angle / 2
+
+        # Desenha os lasers
+        for i in range(num_lasers):
+            # Calcula o ângulo do laser
+            angle_offset = half_cone_angle - (i * cone_angle / (num_lasers - 1))
+            laser_angle = self.angle + angle_offset
+            
+            # Calcula a posição final do laser
+            direction = (math.cos(math.radians(laser_angle)), math.sin(math.radians(laser_angle)))
+            end_pos = (self.pos[0] + direction[0] * self.distancia_maxima_visao, 
+                       self.pos[1] + direction[1] * self.distancia_maxima_visao)
+            
+            # Desenha o laser
+            pygame.draw.line(surface, RED, self.pos, end_pos, 2)
+            
+            # Verifica a colisão do laser com os obstáculos
+            ponto_colisao, distancia = self._verificar_colisao_laser(end_pos)
+            
+            if ponto_colisao:
+                # Adiciona a colisão à lista
+                self.colisoes[i] = {'ponto_colisao': ponto_colisao, 'distancia': distancia}
+
+                # Desenha um círculo vermelho no ponto de colisão
+                pygame.draw.circle(surface, RED, ponto_colisao, 5)
+
+    def _interseccao_laser_personagem(self, laser_inicio, laser_fim, personagem):
+        """Verifica a colisão entre o laser e o círculo de um personagem."""
+        dist_x = laser_fim[0] - laser_inicio[0]
+        dist_y = laser_fim[1] - laser_inicio[1]
+        a = dist_x**2 + dist_y**2
+        b = 2 * (dist_x * (laser_inicio[0] - personagem.pos[0]) + dist_y * (laser_inicio[1] - personagem.pos[1]))
+        c = (laser_inicio[0] - personagem.pos[0])**2 + (laser_inicio[1] - personagem.pos[1])**2 - personagem.radius**2
+        discriminante = b**2 - 4 * a * c
+
+        if discriminante < 0:
+            return False, None, None
         
-        return direcoes
+        sqrt_disc = math.sqrt(discriminante)
+        t1 = (-b - sqrt_disc) / (2 * a)
+        t2 = (-b + sqrt_disc) / (2 * a)
 
+        t = min(t1, t2) if t1 < t2 else max(t1, t2)
+        if t < 0:
+            return False, None, None
+
+        ponto = (laser_inicio[0] + t * dist_x, laser_inicio[1] + t * dist_y)
+        distancia = math.hypot(ponto[0] - laser_inicio[0], ponto[1] - laser_inicio[1])
+
+        return True, ponto, distancia
+    
+    def _interseccao_laser_arena(self, laser_inicio, laser_fim):
+        """Verifica a colisão entre o laser e as bordas da arena."""
+        pontos_borda = [
+            (0, 0, self.arena.largura, 0),
+            (self.arena.largura, 0, self.arena.largura, self.arena.altura),
+            (self.arena.largura, self.arena.altura, 0, self.arena.altura),
+            (0, self.arena.altura, 0, 0)
+        ]
+        
+        ponto_colisao = None
+        menor_distancia = self.distancia_maxima_visao
+
+        for x1, y1, x2, y2 in pontos_borda:
+            colisao, ponto = self._interseccao_segmento(laser_inicio, laser_fim, (x1, y1), (x2, y2))
+            if colisao:
+                distancia = math.hypot(ponto[0] - laser_inicio[0], ponto[1] - laser_inicio[1])
+                if distancia < menor_distancia:
+                    menor_distancia = distancia
+                    ponto_colisao = ponto
+
+        return ponto_colisao, menor_distancia
+    
+    def _verificar_colisao_laser(self, laser_end):
+        """Verifica a colisão do laser com obstáculos, outros personagens e as bordas da arena."""
+        ponto_colisao = None
+        menor_distancia = self.distancia_maxima_visao
+
+        # Verifica colisão com obstáculos
+        for obstaculo in self.arena.obstaculos:
+            colisao, ponto = self._interseccao_laser_obstaculo(self.pos, laser_end, obstaculo)
+            if colisao:
+                distancia = math.hypot(ponto[0] - self.pos[0], ponto[1] - self.pos[1])
+                if distancia < menor_distancia:
+                    menor_distancia = distancia
+                    ponto_colisao = ponto
+
+        # Verifica colisão com outros personagens
+        for personagem in self.arena.personagens:
+            if personagem == self:
+                continue
+            colisao, ponto_colisao_personagem, distancia_personagem = self._interseccao_laser_personagem(self.pos, laser_end, personagem)
+            if colisao and distancia_personagem < menor_distancia:
+                menor_distancia = distancia_personagem
+                ponto_colisao = ponto_colisao_personagem
+
+        # Verifica colisão com as bordas da arena
+        ponto_colisao_arena, distancia_arena = self._interseccao_laser_arena(self.pos, laser_end)
+        if ponto_colisao_arena:
+            if distancia_arena < menor_distancia:
+                menor_distancia = distancia_arena
+                ponto_colisao = ponto_colisao_arena
+
+        return ponto_colisao, menor_distancia
+    
+    def _interseccao_laser_obstaculo(self, laser_inicio, laser_fim, obstaculo):
+        """Verifica a interseção entre o laser e o obstáculo."""
+        # Implementa a verificação de interseção entre o segmento do laser e os lados do retângulo do obstáculo
+        rect = obstaculo.rect
+        pontos = [
+            (rect.left, rect.top),
+            (rect.right, rect.top),
+            (rect.right, rect.bottom),
+            (rect.left, rect.bottom)
+        ]
+        
+        for i in range(4):
+            ponto1 = pontos[i]
+            ponto2 = pontos[(i + 1) % 4]
+            colisao, ponto = self._interseccao_segmento(laser_inicio, laser_fim, ponto1, ponto2)
+            if colisao:
+                return True, ponto
+        
+        return False, None
+    
+    def _interseccao_segmento(self, A, B, C, D):
+        """Verifica a interseção entre dois segmentos de linha (A-B e C-D)."""
+        def orientacao(p, q, r):
+            return (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1])
+
+        def ponto_interseccao(p1, p2, q1, q2):
+            a1, b1 = p1, p2
+            a2, b2 = q1, q2
+            den = (b1[0] - a1[0]) * (b2[1] - a2[1]) - (b1[1] - a1[1]) * (b2[0] - a2[0])
+            if den == 0:
+                return None
+            ua = ((a2[0] - a1[0]) * (b2[1] - a2[1]) - (a2[1] - a1[1]) * (b2[0] - a2[0])) / den
+            return (a1[0] + ua * (b1[0] - a1[0]), a1[1] + ua * (b1[1] - a1[1]))
+
+        if (min(A[0], B[0]) <= max(C[0], D[0]) and min(C[0], D[0]) <= max(A[0], B[0]) and
+            min(A[1], B[1]) <= max(C[1], D[1]) and min(C[1], D[1]) <= max(A[1], B[1])):
+            if orientacao(A, B, C) * orientacao(A, B, D) <= 0 and orientacao(C, D, A) * orientacao(C, D, B) <= 0:
+                ponto = ponto_interseccao(A, B, C, D)
+                return ponto is not None, ponto
+        return False, None
+    
     def calcular_direcoes_som(self):
         direcoes = []
         num_feixes = 8
@@ -150,16 +365,11 @@ class Personagem:
         # Desenha os tiros
         for tiro in self.tiros:
             tiro.desenhar(surface)
+            
+        # Desenha o laser
+        self.desenhar_laser(surface)
+        self.desenhar_laser_360(surface)
 
-        # Desenha os feixes de visão
-        for direcao in self.direcoes_visao:
-            linha_fim = (self.pos[0] + direcao[0] * self.alcance_visao, self.pos[1] + direcao[1] * self.alcance_visao)
-            pygame.draw.line(surface, RED, self.pos, linha_fim, 2)
-        
-        # Desenha os feixes de som
-        # for direcao in self.direcoes_som:
-        #     pygame.draw.line(surface, (0, 255, 0), self.pos, (self.pos[0] + direcao[0] * self.radius, self.pos[1] + direcao[1] * self.radius), 2)
-      
     def _determinar_velocidade(self):
             if self.correndo and self.lento:
                 return self.speed
@@ -245,12 +455,10 @@ class Personagem:
     def rotacionar_esquerda(self):
         """Rotaciona o personagem para a esquerda."""
         self.angle += 5
-        self.atualizar_angulo()
 
     def rotacionar_direita(self):
         """Rotaciona o personagem para a direita."""
         self.angle -= 5
-        self.atualizar_angulo()
 
     def atirar(self):
         """Lança um tiro se o personagem estiver se movendo na velocidade padrão ou menor."""
